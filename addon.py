@@ -1,5 +1,6 @@
 # -*- coding:utf-8 -*-
 from api import NetEase
+from gdmusic import parse_from_gd_music_sync
 from xbmcswift2 import Plugin, xbmcgui, xbmcplugin, xbmc, xbmcaddon
 import re
 import sys
@@ -221,6 +222,42 @@ def trans_date(t):
 
 def B2M(size):
     return str(round(size/1048576, 1))
+
+def get_song_url_with_gdmusic_fallback(song_id, song_data=None, quality_level='standard'):
+    """
+    获取歌曲URL，当原有解析失败时尝试使用GD音乐台解析
+    """
+    # 先尝试原有的网易云音乐API
+    songs = music.songs_url_v1([song_id], level=quality_level).get("data", [])
+    urls = [song['url'] for song in songs]
+    url = urls[0] if urls and len(urls) > 0 else None
+
+    if url is not None:
+        return url
+
+    # 如果原有API失败，尝试使用GD音乐台解析
+    try:
+        if song_data is None:
+            # 获取歌曲详细信息
+            resp = music.songs_detail([song_id])
+            song_info = resp.get('songs', [])[0] if resp.get('songs') else None
+            if not song_info:
+                return None
+        else:
+            song_info = song_data
+
+        # 调用GD音乐台解析
+        gd_result = parse_from_gd_music_sync(song_id, song_info, quality='999', timeout=15000)
+        if gd_result and 'data' in gd_result and 'data' in gd_result['data']:
+            gd_url = gd_result['data']['data'].get('url')
+            if gd_url:
+                xbmc.log(f'GD音乐台成功解析歌曲ID: {song_id}', xbmc.LOGINFO)
+                return gd_url
+
+    except Exception as e:
+        xbmc.log(f'GD音乐台解析失败: {str(e)}', xbmc.LOGERROR)
+
+    return None
 
 
 def get_songs(songs, privileges=[], picUrl=None, source=''):
@@ -709,9 +746,8 @@ def song_contextmenu(action, meida_type, song_id, mv_id, sourceId, dt):
             dialog.notification(
                 '收藏', msg, xbmcgui.NOTIFICATION_INFO, 800, False)
     elif action == 'play_song':
-        songs = music.songs_url_v1([song_id], level=level).get("data", [])
-        urls = [song['url'] for song in songs]
-        url = urls[0]
+        # 使用新的带GD音乐台备用的URL获取函数
+        url = get_song_url_with_gdmusic_fallback(song_id, quality_level=level)
         if url is None:
             dialog = xbmcgui.Dialog()
             dialog.notification(
@@ -746,13 +782,8 @@ def play(meida_type, song_id, mv_id, sourceId, dt):
             else:
                 url = urls[0]
     elif meida_type == 'song':
-        songs = music.songs_url_v1([song_id], level=level).get("data", [])
-        urls = [song['url'] for song in songs]
-        # 一般是网络错误
-        if len(urls) == 0:
-            url = None
-        else:
-            url = urls[0]
+        # 使用新的带GD音乐台备用的URL获取函数
+        url = get_song_url_with_gdmusic_fallback(song_id, quality_level=level)
         if url is None:
             if int(mv_id) > 0 and xbmcplugin.getSetting(int(sys.argv[1]), 'auto_play_mv') == 'true':
                 mv = music.mv_url(mv_id, r).get("data", {})
@@ -1295,17 +1326,8 @@ def play_recommend_songs(song_id, mv_id, dt):
         if priv.get('pl', None) == 0 and xbmcplugin.getSetting(int(sys.argv[1]), 'hide_songs') == 'true':
             continue  # 跳过不可播放的歌曲
 
-        # 获取歌曲URL，最多尝试3次
-        url = None
-        for attempt in range(3):
-            try:
-                songs_url = music.songs_url_v1([track['id']], level).get("data", [])
-                url = songs_url[0]['url'] if songs_url and len(songs_url) > 0 else None
-                if url is not None:
-                    break
-            except Exception as e:
-                xbmc.log(f"获取歌曲URL失败（尝试{attempt+1}/3）：{str(e)}", xbmc.LOGERROR)
-                time.sleep(0.5)
+        # 获取歌曲URL，使用新的带GD音乐台备用的函数
+        url = get_song_url_with_gdmusic_fallback(track['id'], song_data=track, quality_level=level)
 
         # 如果URL为空，跳过此歌曲
         if url is None:
@@ -1388,17 +1410,8 @@ def play_playlist_songs(playlist_id, song_id, mv_id, dt):
         if priv.get('pl', None) == 0 and xbmcplugin.getSetting(int(sys.argv[1]), 'hide_songs') == 'true':
             continue  # 跳过不可播放的歌曲
 
-        # 获取歌曲URL，最多尝试3次
-        url = None
-        for attempt in range(3):
-            try:
-                songs_url = music.songs_url_v1([track['id']], level).get("data", [])
-                url = songs_url[0]['url'] if songs_url and len(songs_url) > 0 else None
-                if url is not None:
-                    break
-            except Exception as e:
-                xbmc.log(f"获取歌曲URL失败（尝试{attempt+1}/3）：{str(e)}", xbmc.LOGERROR)
-                time.sleep(0.5)
+        # 获取歌曲URL，使用新的带GD音乐台备用的函数
+        url = get_song_url_with_gdmusic_fallback(track['id'], song_data=track, quality_level=level)
 
         # 如果URL为空，跳过此歌曲
         if url is None:
