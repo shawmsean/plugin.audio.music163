@@ -11,6 +11,7 @@ import json
 from typing import Dict, Any, Optional, List, Union
 import requests
 from urllib.parse import quote
+import time,random
 
 # 定义数据结构
 class GDMusicResponse:
@@ -240,16 +241,186 @@ def parse_from_gd_music_sync(
     Returns:
         解析结果或None
     """
-    # 创建事件循环并运行异步函数
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    # 直接使用同步方法，避免事件循环问题
     try:
-        result = loop.run_until_complete(
-            parse_from_gd_music(id, data, quality, timeout)
-        )
-        return result
-    finally:
-        loop.close()
+        # 处理不同数据结构
+        if not data:
+            print('GD音乐台解析：歌曲数据为空')
+            return None
+
+        # 提取歌曲名称
+        song_name = data.get('name', '')
+
+        # 提取艺术家名称
+        artist_names = ''
+        if 'artists' in data and isinstance(data['artists'], list):
+            artist_names = ' '.join([artist.get('name', '') for artist in data['artists']])
+        elif 'ar' in data and isinstance(data['ar'], list):
+            artist_names = ' '.join([artist.get('name', '') for artist in data['ar']])
+        elif 'artist' in data:
+            artist_names = data['artist'] if isinstance(data['artist'], str) else ''
+
+        search_query = f"{song_name} {artist_names}".strip()
+
+        if not search_query or len(search_query) < 2:
+            print('GD音乐台解析：搜索查询过短', {'name': song_name, 'artists': artist_names})
+            return None
+
+        print('GD音乐台开始搜索:', search_query)
+
+        # 依次尝试所有音源
+        for source in ALL_SOURCES:
+            try:
+                result = search_and_get_url_sync(source, search_query, quality)
+                if result:
+                    print(f'GD音乐台成功通过 {result.source} 解析音乐!')
+                    # 返回符合原API格式的数据
+                    return {
+                        'data': {
+                            'data': {
+                                'url': result.url.replace('\\', ''),
+                                'br': int(result.br) * 1000 if result.br else 320000,
+                                'size': result.size or 0,
+                                'md5': '',
+                                'platform': 'gdmusic',
+                                'gain': 0
+                            },
+                            'params': {
+                                'id': int(id),
+                                'type': 'song'
+                            }
+                        }
+                    }
+            except Exception as e:
+                print(f'GD音乐台 {source} 音源解析失败: {str(e)}')
+                # 该音源失败，继续尝试下一个音源
+                continue
+
+        print('GD音乐台所有音源均解析失败')
+        return None
+    except Exception as e:
+        print(f'GD音乐台解析完全失败: {str(e)}')
+        return None
+
+def search_and_get_url_sync(
+    source: str,
+    search_query: str,
+    quality: str
+) -> Optional[GDMusicUrlResult]:
+    """
+    同步版本的搜索和获取URL函数
+
+    Args:
+        source: 音源
+        search_query: 搜索关键词
+        quality: 音质
+
+    Returns:
+        音乐URL结果或None
+    """
+    # 1. 搜索歌曲
+    search_url = f"{BASE_URL}?types=search&source={source}&name={quote(search_query)}&count=1&pages=1"
+    print(f'GD音乐台尝试音源 {source} 搜索: {search_url}')
+    MAX_RETRIES = 3  # 最大重试次数
+    RETRY_DELAY = 1  # 重试延迟时间（秒）
+    REQUEST_TIMEOUT = 10  # 请求超时时间（秒）
+    def make_request_with_retry(url, params=None, retry_count=0):
+        REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9",
+    "Referer": "https://www.joox.com/",
+    "Origin": "https://www.joox.com",
+    "Connection": "keep-alive"
+            }
+
+        """带重试机制的请求函数"""
+        try:
+            # 添加随机延迟以避免请求过于频繁
+            if retry_count > 0:
+                time.sleep(RETRY_DELAY * retry_count)
+
+            # 使用Session对象以保持连接池
+            with requests.Session() as session:
+                # 设置请求头
+                headers = REQUEST_HEADERS.copy()
+                # 添加随机参数以避免缓存
+                if params:
+                    params['_'] = str(int(time.time() * 1000)) + str(random.randint(100, 999))
+                else:
+                    params = {'_': str(int(time.time() * 1000)) + str(random.randint(100, 999))}
+
+                response = session.get(
+                    url,
+                    headers=headers,
+                    params=params if params else None,
+                    timeout=REQUEST_TIMEOUT
+                )
+
+                # 检查响应状态码
+                if response.status_code == 403:
+                    print(f'GD音乐台请求被拒绝(403)，可能需要添加更多请求头或代理')
+                    return None, response.status_code
+                elif response.status_code != 200:
+                    print(f'GD音乐台请求失败，状态码: {response.status_code}')
+                    if retry_count < MAX_RETRIES:
+                        return make_request_with_retry(url, params, retry_count + 1)
+                    return None, response.status_code
+
+                # 检查响应内容是否为空
+                if not response.text.strip():
+                    print(f'GD音乐台返回空响应')
+                    return None, response.status_code
+
+                try:
+                    return response.json(), response.status_code
+                except json.JSONDecodeError as e:
+                    print(f'GD音乐台 JSON解析失败: {str(e)}，响应内容: {response.text[:200]}...')
+                    return None, response.status_code
+
+        except requests.exceptions.RequestException as e:
+            print(f'GD音乐台请求异常: {str(e)}')
+            if retry_count < MAX_RETRIES:
+                return make_request_with_retry(url, params, retry_count + 1)
+            return None, 0
+
+    # 执行搜索请求
+    search_data, search_status = make_request_with_retry(search_url)
+    if search_data is None:
+        return None
+
+    if search_data and isinstance(search_data, list) and len(search_data) > 0:
+        first_result = search_data[0]
+        if not first_result or 'id' not in first_result:
+            print(f'GD音乐台 {source} 搜索结果无效')
+            return None
+
+        track_id = first_result['id']
+        track_source = first_result.get('source', source)
+
+        # 2. 获取歌曲URL
+        song_url = f"{BASE_URL}?types=url&source={track_source}&id={track_id}&br={quality}"
+        print(f'GD音乐台尝试获取 {track_source} 歌曲URL: {song_url}')
+
+        song_data, song_status = make_request_with_retry(song_url)
+        if song_data is None:
+            return None
+
+        if song_data and 'url' in song_data:
+            return GDMusicUrlResult(
+                url=song_data['url'],
+                br=song_data.get('br', '320'),
+                size=song_data.get('size', 0),
+                source=track_source
+            )
+        else:
+            print(f'GD音乐台 {track_source} 未返回有效URL')
+            return None
+    else:
+        print(f'GD音乐台 {source} 搜索结果为空')
+        return None
 
 if __name__ == '__main__':
     # 示例用法
@@ -259,7 +430,7 @@ if __name__ == '__main__':
     }
 
     print('开始测试GD音乐台解析...')
-    result = parse_from_gd_music_sync(456856931, example_data)
+    result = parse_from_gd_music_sync(27876478, example_data)
     if result:
         print('解析成功!')
         print(json.dumps(result, indent=2, ensure_ascii=False))

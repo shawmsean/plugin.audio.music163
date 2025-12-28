@@ -11,6 +11,9 @@ import xbmcvfs
 import qrcode
 from datetime import datetime
 import json
+
+
+
 try:
     xbmc.translatePath = xbmcvfs.translatePath
 except AttributeError:
