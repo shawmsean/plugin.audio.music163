@@ -804,16 +804,15 @@ def play(meida_type, song_id, mv_id, sourceId, dt):
                     artist = "/".join([a.get('name') for a in artists if a.get('name')])
                     album = (song_info.get('al') or song_info.get('album') or {}).get('name')
                     duration = song_info.get('dt') or song_info.get('duration')
-                    info = {
-                        'mediatype': 'music',
-                        'title': title or '',
-                        'artist': artist or '',
-                        'album': album or '',
-                        'duration': (duration // 1000) if isinstance(duration, int) else 0,
-                        'dbid': int(song_id) if song_id and str(song_id).isdigit() else None,
-                    }
-                    listitem = xbmcgui.ListItem(label=info['title'])
-                    listitem.setInfo('music', info)
+
+                    listitem = xbmcgui.ListItem(label=title or '')
+                    music_tag = listitem.getMusicInfoTag()
+                    music_tag.setTitle(title or '')
+                    music_tag.setArtist(artist or '')
+                    music_tag.setAlbum(album or '')
+                    music_tag.setDuration((duration // 1000) if isinstance(duration, int) else 0)
+                    if song_id and str(song_id).isdigit():
+                        music_tag.setDatabaseId(int(song_id))
                 except Exception:
                     listitem = xbmcgui.ListItem()
             elif meida_type == 'mv':
@@ -1322,12 +1321,11 @@ def play_recommend_songs(song_id, mv_id, dt):
         album = (track.get('al') or track.get('album') or {}).get('name')
 
         listitem = xbmcgui.ListItem(label=track['name'])
-        listitem.setInfo('music', {
-            'title': track['name'],
-            'artist': artist,
-            'album': album,
-            'duration': track.get('dt', 0) // 1000,
-        })
+        music_tag = listitem.getMusicInfoTag()
+        music_tag.setTitle(track['name'])
+        music_tag.setArtist(artist)
+        music_tag.setAlbum(album)
+        music_tag.setDuration(track.get('dt', 0) // 1000)
 
         # 添加到播放列表
         playlist.add(url, listitem)
@@ -1415,12 +1413,11 @@ def play_playlist_songs(playlist_id, song_id, mv_id, dt):
         album = (track.get('al') or track.get('album') or {}).get('name')
 
         listitem = xbmcgui.ListItem(label=track['name'])
-        listitem.setInfo('music', {
-            'title': track['name'],
-            'artist': artist,
-            'album': album,
-            'duration': track.get('dt', 0) // 1000,
-        })
+        music_tag = listitem.getMusicInfoTag()
+        music_tag.setTitle(track['name'])
+        music_tag.setArtist(artist)
+        music_tag.setAlbum(album)
+        music_tag.setDuration(track.get('dt', 0) // 1000)
 
         # 添加到播放列表
         playlist.add(url, listitem)
@@ -1697,6 +1694,16 @@ def get_dj_items(songs, sourceId):
         ar_name = play['dj']['nickname']
 
         label = play['name']
+
+        listitem = xbmcgui.ListItem(label=label)
+        music_tag = listitem.getMusicInfoTag()
+        music_tag.setTitle(play['name'])
+        music_tag.setArtist(ar_name)
+        music_tag.setAlbum(play['radio']['name'])
+        # music_tag.setTrackNumber(play['no'])
+        # music_tag.setDiscNumber(play['disc'])
+        # music_tag.setDuration(play['dt']//1000)
+        # music_tag.setDatabaseId(play['id'])
 
         items.append({
             'label': label,
