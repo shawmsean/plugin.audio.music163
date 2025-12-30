@@ -820,9 +820,9 @@ def play(meida_type, song_id, mv_id, sourceId, dt):
                     # 尝试读取 mv 的简单信息（如有），否则构建最小 listitem
                     mv_detail = music.mv_url(mv_id, r).get('data', {})
                     title = mv_detail.get('name') or mv_detail.get('title') or ''
-                    info = {'mediatype': 'video', 'title': title}
                     listitem = xbmcgui.ListItem(label=title)
-                    listitem.setInfo('video', info)
+                    video_tag = listitem.getVideoInfoTag()
+                    video_tag.setTitle(title)
                 except Exception:
                     listitem = xbmcgui.ListItem()
             elif meida_type == 'dj':
@@ -835,15 +835,13 @@ def play(meida_type, song_id, mv_id, sourceId, dt):
                     artist = "/".join([a.get('name') for a in artists if a.get('name')])
                     album = (song_info.get('al') or song_info.get('album') or {}).get('name')
                     duration = song_info.get('dt') or song_info.get('duration')
-                    info = {
-                        'mediatype': 'music',
-                        'title': title or '',
-                        'artist': artist or '',
-                        'album': album or '',
-                        'duration': (duration // 1000) if isinstance(duration, int) else 0,
-                    }
-                    listitem = xbmcgui.ListItem(label=info['title'])
-                    listitem.setInfo('music', info)
+
+                    listitem = xbmcgui.ListItem(label=title or '')
+                    music_tag = listitem.getMusicInfoTag()
+                    music_tag.setTitle(title or '')
+                    music_tag.setArtist(artist or '')
+                    music_tag.setAlbum(album or '')
+                    music_tag.setDuration((duration // 1000) if isinstance(duration, int) else 0)
                 except Exception:
                     listitem = xbmcgui.ListItem()
             elif meida_type == 'mlog':
@@ -851,9 +849,9 @@ def play(meida_type, song_id, mv_id, sourceId, dt):
                     # mlog 可能返回较深的结构，尝试安全读取标题
                     mlog_detail = music.mlog_detail(mv_id, r).get('data', {})
                     title = mlog_detail.get('resource', {}).get('content', {}).get('video', {}).get('title') or ''
-                    info = {'mediatype': 'video', 'title': title}
                     listitem = xbmcgui.ListItem(label=title)
-                    listitem.setInfo('video', info)
+                    video_tag = listitem.getVideoInfoTag()
+                    video_tag.setTitle(title)
                 except Exception:
                     listitem = xbmcgui.ListItem()
             else:
