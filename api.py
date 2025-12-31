@@ -5,10 +5,10 @@ import sys
 import time
 import requests
 from encrypt import encrypted_request
-from xbmcswift2 import xbmc, xbmcaddon, xbmcplugin
+from xbmcswift2 import xbmc, xbmcaddon, xbmcplugin # type: ignore
 from http.cookiejar import Cookie
 from http.cookiejar import MozillaCookieJar
-import xbmcvfs
+import xbmcvfs # pyright: ignore[reportMissingImports]
 try:
     xbmc.translatePath = xbmcvfs.translatePath
 except AttributeError:

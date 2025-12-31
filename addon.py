@@ -1,13 +1,13 @@
 # -*- coding:utf-8 -*-
 from api import NetEase
-from xbmcswift2 import Plugin, xbmcgui, xbmcplugin, xbmc, xbmcaddon
+from xbmcswift2 import Plugin, xbmcgui, xbmcplugin, xbmc, xbmcaddon # type: ignore
 import re
 import sys
 import hashlib
 import time
 import os
-import xbmcvfs
-import qrcode
+import xbmcvfs # type: ignore
+import qrcode # type: ignore
 from datetime import datetime
 import json
 try:
@@ -17,7 +17,7 @@ except AttributeError:
 
 PY3 = sys.version_info.major >= 3
 if not PY3:
-    reload(sys)
+    reload(sys) # type: ignore
     sys.setdefaultencoding('utf-8')
 
 plugin = Plugin()
