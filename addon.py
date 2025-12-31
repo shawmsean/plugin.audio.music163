@@ -1325,6 +1325,16 @@ def play_recommend_songs(song_id, mv_id, dt):
         music_tag.setAlbum(album)
         music_tag.setDuration(track.get('dt', 0) // 1000)
 
+        # 设置图片的URL和相关的属性
+        picUrl = None
+        if 'al' in track and track['al'] is not None and 'picUrl' in track['al']:
+            picUrl = track['al']['picUrl']
+        elif 'album' in track and track['album'] is not None and 'picUrl' in track['album']:
+            picUrl = track['album']['picUrl']
+
+        if picUrl is not None:
+            listitem.setArt({'icon': picUrl, 'thumbnail': picUrl, 'fanart': picUrl})
+
         # 添加到播放列表
         playlist.add(url, listitem)
         playlist_index += 1
@@ -1416,6 +1426,16 @@ def play_playlist_songs(playlist_id, song_id, mv_id, dt):
         music_tag.setArtist(artist)
         music_tag.setAlbum(album)
         music_tag.setDuration(track.get('dt', 0) // 1000)
+
+        # 设置图片的URL和相关的属性
+        picUrl = None
+        if 'al' in track and track['al'] is not None and 'picUrl' in track['al']:
+            picUrl = track['al']['picUrl']
+        elif 'album' in track and track['album'] is not None and 'picUrl' in track['album']:
+            picUrl = track['album']['picUrl']
+
+        if picUrl is not None:
+            listitem.setArt({'icon': picUrl, 'thumbnail': picUrl, 'fanart': picUrl})
 
         # 添加到播放列表
         playlist.add(url, listitem)
