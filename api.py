@@ -17,6 +17,7 @@ except AttributeError:
 DEFAULT_TIMEOUT = 10
 
 BASE_URL = "https://music.163.com"
+TUNEHUB_API = "https://music-dl.sayqz.com/api/"
 
 PROFILE = xbmc.translatePath(xbmcaddon.Addon().getAddonInfo('profile'))
 if not os.path.exists(PROFILE):
@@ -268,7 +269,59 @@ class NetEase(object):
     def songs_url(self, ids, bitrate):
         path = "/weapi/song/enhance/player/url"
         params = dict(ids=ids, br=bitrate)
-        return self.request("POST", path, params)
+        # 首先尝试原始网易云接口
+        data = self.request("POST", path, params)
+
+        # 如果原始接口返回可用播放地址，则直接返回
+        try:
+            if isinstance(data, dict) and 'data' in data and len(data['data']) > 0 and data['data'][0].get('url'):
+                return data
+        except Exception:
+            pass
+
+        # 否则回退到 TuneHub 服务逐条获取可播放地址
+        try:
+            # 规范化 ids 为列表
+            if isinstance(ids, str):
+                try:
+                    ids_list = json.loads(ids)
+                except Exception:
+                    # 可能是逗号分隔或单个 id 字符串
+                    if ids.startswith('[') and ids.endswith(']'):
+                        ids_list = [ids]
+                    else:
+                        ids_list = [ids]
+            elif isinstance(ids, list):
+                ids_list = ids
+            else:
+                ids_list = [ids]
+        except Exception:
+            ids_list = [ids]
+
+        result_data = []
+        for _id in ids_list:
+            url = None
+            try:
+                tun = self.tunehub_url(_id, bitrate)
+                if isinstance(tun, dict):
+                    # 常见返回格式： {'code':200,'data':{...}} 或 {'code':200,'data':[...]} 或 {'url': '...'}
+                    if 'url' in tun:
+                        url = tun.get('url')
+                    elif 'data' in tun:
+                        d = tun.get('data')
+                        if isinstance(d, dict):
+                            url = d.get('url')
+                        elif isinstance(d, list) and len(d) > 0:
+                            # 尝试从第一个元素取 url
+                            url = d[0].get('url') if isinstance(d[0], dict) else None
+                elif isinstance(tun, str):
+                    url = tun
+            except Exception:
+                url = None
+
+            result_data.append({'id': _id, 'url': url, 'br': bitrate})
+
+        return {'data': result_data}
 
     def songs_url_v1(self, ids, level):
         path = "/weapi/song/enhance/player/url/v1"
@@ -278,6 +331,25 @@ class NetEase(object):
         else:
             params = dict(ids=ids, level=level, encodeType='flac')
             return self.request("POST", path, params)
+
+    def tunehub_request(self, params):
+        """Call TuneHub (music-dl.sayqz.com) API with given params and return parsed JSON or empty dict."""
+        try:
+            if not self.enable_proxy:
+                resp = self.session.get(TUNEHUB_API, params=params, headers=self.header, timeout=DEFAULT_TIMEOUT)
+            else:
+                resp = self.session.get(TUNEHUB_API, params=params, headers=self.header, timeout=DEFAULT_TIMEOUT, proxies=self.proxies, verify=False)
+            return resp.json()
+        except Exception:
+            return {}
+
+    def tunehub_url(self, id, br=None):
+        """Request TuneHub for a playable URL for `id` (netease id)."""
+        params = {'source': 'netease', 'id': id, 'type': 'url'}
+        if br:
+            # TuneHub expects br like '320k' or 'flac'
+            params['br'] = str(br)
+        return self.tunehub_request(params)
 
     # lyric http://music.163.com/api/song/lyric?os=osx&id= &lv=-1&kv=-1&tv=-1
     def song_lyric(self, music_id):
